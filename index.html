@@ -1,68 +1,413 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Number Guessing Game</title>
-	<style>
-		body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1rem; }
-		form { display: flex; gap: .5rem; flex-wrap: wrap; }
-		input, button { font: inherit; padding: .5rem; }
-		#message { min-height: 1.5em; }
-	</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Number Guessing Game</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Glassmorphism background effect */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Confetti Container styling */
+        #number-game-confetti-container {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 99999;
+        }
+
+        .number-game-confetti-piece {
+            position: absolute;
+            width: 12px;
+            height: 18px;
+            border-radius: 3px;
+            opacity: 0.95;
+            animation: number-game-confetti-burst 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        @keyframes number-game-confetti-burst {
+            0% {
+                transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+                opacity: 1;
+            }
+            70% {
+                opacity: 0.9;
+            }
+            100% {
+                transform: translate3d(var(--tx), var(--ty), 0) rotate(var(--rot)) scale(0.6);
+                opacity: 0;
+            }
+        }
+
+        /* Custom shake animation for wrong guess */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+
+        .animate-shake {
+            animation: shake 0.4s ease-in-out;
+        }
+    </style>
 </head>
-<body>
-	<h1>Number Guessing Game</h1>
-	<p>I'm thinking of a number from 1 to 100. Can you guess it?</p>
-	<form id="guess-form">
-		<label for="guess">Your guess:</label>
-		<input id="guess" type="number" min="1" max="100" required autofocus>
-		<button type="submit">Guess</button>
-	</form>
-	<p id="message" role="status" aria-live="polite">You have 0 guesses.</p>
-	<button id="reset" type="button" hidden>Play again</button>
+<body class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 min-h-screen flex items-center justify-center p-4 sm:p-6 select-none">
 
-	<script>
-		const form = document.getElementById('guess-form');
-		const input = document.getElementById('guess');
-		const message = document.getElementById('message');
-		const resetButton = document.getElementById('reset');
-		let answer;
-		let guesses;
+    <main class="w-full max-w-md glass-card rounded-3xl p-6 sm:p-8 text-slate-800 shadow-2xl relative transition-all duration-300">
+        
+        <!-- Header Section -->
+        <header class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-14 h-14 bg-indigo-100 text-indigo-600 rounded-2xl mb-3 shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">Number Guesses</h1>
+            <p id="range-subtitle" class="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
+                Guess the secret integer between <span class="font-semibold text-indigo-600">1</span> and <span class="font-semibold text-indigo-600">100</span>
+            </p>
+        </header>
 
-		function startGame() {
-			answer = Math.floor(Math.random() * 100) + 1;
-			guesses = 0;
-			input.value = '';
-			input.disabled = false;
-			form.querySelector('button').disabled = false;
-			resetButton.hidden = true;
-			message.textContent = 'You have 0 guesses.';
-			input.focus();
-		}
+        <!-- Stats Counter Pill -->
+        <div class="flex justify-center mb-6">
+            <div class="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-full flex items-center gap-2 shadow-sm">
+                <span class="text-xs uppercase tracking-wider text-indigo-500 font-bold">Attempts left:</span>
+                <span id="guesses-badge" class="bg-indigo-600 text-white font-extrabold text-xs px-2.5 py-0.5 rounded-full shadow-sm">5</span>
+            </div>
+        </div>
 
-		form.addEventListener('submit', (event) => {
-			event.preventDefault();
-			const guess = Number(input.value);
-			if (!Number.isInteger(guess) || guess < 1 || guess > 100) {
-				message.textContent = 'Enter a whole number from 1 to 100.';
-				return;
-			}
+        <!-- Feedback Box -->
+        <div id="feedback-box" class="min-h-[56px] flex items-center justify-center p-3 rounded-2xl mb-6 bg-slate-100 border border-slate-200 text-center transition-all duration-300">
+            <p id="feedback-message" class="text-sm font-medium text-slate-600">Enter a number below to start!</p>
+        </div>
 
-			guesses++;
-			if (guess === answer) {
-				message.textContent = `Correct! You got it in ${guesses} ${guesses === 1 ? 'guess' : 'guesses'}.`;
-				input.disabled = true;
-				form.querySelector('button').disabled = true;
-				resetButton.hidden = false;
-			} else {
-				message.textContent = `${guess < answer ? 'Too low' : 'Too high'}! Try again. Guesses: ${guesses}.`;
-				input.select();
-			}
-		});
+        <!-- Form Input & Button -->
+        <form id="guess-form" onsubmit="handleGuessSubmit(event)" class="space-y-4">
+            <div>
+                <label for="guess-input" class="sr-only">Your Guess</label>
+                <input 
+                    type="number" 
+                    id="guess-input" 
+                    placeholder="Enter your guess (e.g. 42)" 
+                    class="w-full px-4 py-3.5 text-center text-lg font-bold bg-slate-50 border-2 border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all text-slate-800 placeholder-slate-400"
+                    step="1"
+                    autocomplete="off"
+                    required
+                >
+            </div>
 
-		resetButton.addEventListener('click', startGame);
-		startGame();
-	</script>
+            <button 
+                type="submit" 
+                id="submit-btn" 
+                class="w-full py-3.5 px-6 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-base rounded-2xl shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transform active:scale-[0.98] transition-all duration-150 flex items-center justify-center gap-2"
+            >
+                Submit Guess
+            </button>
+        </form>
+
+        <!-- Reset Button -->
+        <div id="reset-container" class="mt-4 hidden">
+            <button 
+                type="button" 
+                onclick="handleResetGame()" 
+                class="w-full py-3.5 px-6 bg-slate-800 hover:bg-slate-900 active:bg-black text-white font-bold text-base rounded-2xl shadow-md transform active:scale-[0.98] transition-all duration-150 flex items-center justify-center gap-2"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Play Again
+            </button>
+        </div>
+
+    </main>
+
+    <script>
+        // GAME CONFIGURATION & STATE
+        const MIN_NUM = 1;
+        const MAX_NUM = 100;
+        const MAX_GUESSES = 5;
+
+        let state = createInitialState();
+
+        function createInitialState() {
+            return {
+                min: MIN_NUM,
+                max: MAX_NUM,
+                winningNum: getRandomNum(MIN_NUM, MAX_NUM),
+                guessesLeft: MAX_GUESSES,
+                gameOver: false,
+            };
+        }
+
+        function getRandomNum(lowerBound, upperBound) {
+            if (!Number.isInteger(lowerBound) || !Number.isInteger(upperBound)) {
+                throw new TypeError("Random bounds must be integers.");
+            }
+
+            const start = Math.min(lowerBound, upperBound);
+            const end = Math.max(lowerBound, upperBound);
+
+            return Math.floor(Math.random() * (end - start + 1)) + start;
+        }
+
+        function formatGuessCount(count) {
+            return `${count} guess${count === 1 ? "" : "es"} left`;
+        }
+
+        function normalizeGuess(guess) {
+            const normalizedGuess = guess == null ? "" : String(guess).trim();
+            return normalizedGuess === "" ? NaN : Number(normalizedGuess);
+        }
+
+        function resetGameLogic() {
+            state = createInitialState();
+            return { ...state };
+        }
+
+        function ensureConfettiStyles() {
+            if (typeof document === "undefined") return;
+
+            if (document.getElementById("number-game-confetti-styles")) {
+                return;
+            }
+
+            const style = document.createElement("style");
+            style.id = "number-game-confetti-styles";
+            style.textContent = `
+                #number-game-confetti-container {
+                    position: fixed;
+                    inset: 0;
+                    pointer-events: none;
+                    overflow: hidden;
+                    z-index: 99999;
+                }
+
+                .number-game-confetti-piece {
+                    position: absolute;
+                    width: 10px;
+                    height: 16px;
+                    border-radius: 2px;
+                    opacity: 0.9;
+                    animation: number-game-confetti-burst 1.6s ease-out forwards;
+                }
+
+                @keyframes number-game-confetti-burst {
+                    0% {
+                        transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+                        opacity: 1;
+                    }
+                    100% {
+                        transform: translate3d(var(--tx), var(--ty), 0) rotate(var(--rot)) scale(0.9);
+                        opacity: 0;
+                    }
+                }
+            `;
+
+            document.head.appendChild(style);
+        }
+
+        function launchConfetti() {
+            if (typeof document === "undefined" || typeof window === "undefined" || !document.body) return;
+
+            ensureConfettiStyles();
+
+            const existingContainer = document.getElementById("number-game-confetti-container");
+            if (existingContainer) {
+                existingContainer.remove();
+            }
+
+            const container = document.createElement("div");
+            container.id = "number-game-confetti-container";
+            const colors = ["#f94144", "#f9c74f", "#43aa8b", "#577590", "#f3722c", "#9b5de5"];
+            const viewportWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth || 0;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight || 0;
+            const centerX = viewportWidth / 2;
+            const centerY = viewportHeight / 2;
+
+            for (let i = 0; i < 260; i += 1) {
+                const piece = document.createElement("span");
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 90 + Math.random() * 1000;
+                const startOffsetX = (Math.random() - 0.5) * 120;
+                const startOffsetY = (Math.random() - 0.5) * 120;
+                const startX = centerX + startOffsetX;
+                const startY = centerY + startOffsetY;
+
+                piece.className = "number-game-confetti-piece";
+                piece.style.left = `${startX}px`;
+                piece.style.top = `${startY}px`;
+                piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                piece.style.setProperty("--tx", `${Math.cos(angle) * distance}px`);
+                piece.style.setProperty("--ty", `${Math.sin(angle) * distance}px`);
+                piece.style.setProperty("--rot", `${Math.random() * 720}deg`);
+                container.appendChild(piece);
+            }
+
+            document.body.appendChild(container);
+            setTimeout(() => container.remove(), 1600);
+        }
+
+        function checkGuess(guess) {
+            if (state.gameOver) {
+                return {
+                    correct: false,
+                    message: "This game is over. Start a new game to guess again.",
+                    guessesLeft: state.guessesLeft,
+                    gameOver: true,
+                };
+            }
+
+            const numericGuess = normalizeGuess(guess);
+
+            if (!Number.isInteger(numericGuess) || !Number.isFinite(numericGuess)) {
+                return {
+                    correct: false,
+                    message: "Please enter a valid integer.",
+                    guessesLeft: state.guessesLeft,
+                    gameOver: false,
+                };
+            }
+
+            if (numericGuess < state.min || numericGuess > state.max) {
+                return {
+                    correct: false,
+                    message: `Please enter a number between ${state.min.toLocaleString()} and ${state.max.toLocaleString()}.`,
+                    guessesLeft: state.guessesLeft,
+                    gameOver: false,
+                };
+            }
+
+            if (numericGuess === state.winningNum) {
+                state.gameOver = true;
+                launchConfetti();
+                return {
+                    correct: true,
+                    message: "🎉 You guessed the correct number!",
+                    guessesLeft: state.guessesLeft,
+                    gameOver: true,
+                };
+            }
+
+            state.guessesLeft -= 1;
+
+            if (state.guessesLeft <= 0) {
+                state.gameOver = true;
+                return {
+                    correct: false,
+                    message: `❌ Out of guesses! The correct number was ${state.winningNum.toLocaleString()}.`,
+                    guessesLeft: 0,
+                    gameOver: true,
+                };
+            }
+
+            const hint = numericGuess < state.winningNum ? "too low" : "too high";
+
+            return {
+                correct: false,
+                message: `❌ Incorrect. Your guess is ${hint}. ${formatGuessCount(state.guessesLeft)}.`,
+                guessesLeft: state.guessesLeft,
+                gameOver: false,
+            };
+        }
+
+        const guessInput = document.getElementById("guess-input");
+        const submitBtn = document.getElementById("submit-btn");
+        const feedbackBox = document.getElementById("feedback-box");
+        const feedbackMessage = document.getElementById("feedback-message");
+        const guessesBadge = document.getElementById("guesses-badge");
+        const resetContainer = document.getElementById("reset-container");
+
+        function handleGuessSubmit(event) {
+            event.preventDefault();
+            
+            const rawValue = guessInput.value;
+            const result = checkGuess(rawValue);
+
+            // Update remaining guesses badge
+            guessesBadge.textContent = result.guessesLeft;
+
+            // Update UI message and styles based on result
+            feedbackMessage.textContent = result.message;
+
+            // Remove existing shake animations
+            feedbackBox.classList.remove("animate-shake");
+
+            if (result.correct) {
+                feedbackBox.className = "min-h-[56px] flex items-center justify-center p-3 rounded-2xl mb-6 bg-emerald-50 border border-emerald-200 text-center transition-all duration-300";
+                feedbackMessage.className = "text-sm font-bold text-emerald-700";
+                endGameUI();
+            } else if (result.gameOver) {
+                feedbackBox.className = "min-h-[56px] flex items-center justify-center p-3 rounded-2xl mb-6 bg-rose-50 border border-rose-200 text-center transition-all duration-300";
+                feedbackMessage.className = "text-sm font-bold text-rose-700";
+                endGameUI();
+            } else {
+                // Incorrect guess or invalid input
+                feedbackBox.className = "min-h-[56px] flex items-center justify-center p-3 rounded-2xl mb-6 bg-amber-50 border border-amber-200 text-center transition-all duration-300";
+                feedbackMessage.className = "text-sm font-semibold text-amber-800";
+                
+                // Trigger quick shake
+                void feedbackBox.offsetWidth; // Trigger reflow
+                feedbackBox.classList.add("animate-shake");
+            }
+
+            guessInput.value = "";
+            guessInput.focus();
+        }
+
+        function endGameUI() {
+            guessInput.disabled = true;
+            guessInput.classList.add("opacity-50", "cursor-not-allowed");
+            submitBtn.disabled = true;
+            submitBtn.classList.add("opacity-50", "cursor-not-allowed", "hover:bg-indigo-600");
+            resetContainer.classList.remove("hidden");
+        }
+
+        function handleResetGame() {
+            resetGameLogic();
+
+            // Reset UI states
+            guessesBadge.textContent = MAX_GUESSES;
+            feedbackBox.className = "min-h-[56px] flex items-center justify-center p-3 rounded-2xl mb-6 bg-slate-100 border border-slate-200 text-center transition-all duration-300";
+            feedbackMessage.className = "text-sm font-medium text-slate-600";
+            feedbackMessage.textContent = "Enter a number below to start!";
+
+            guessInput.disabled = false;
+            guessInput.value = "";
+            guessInput.classList.remove("opacity-50", "cursor-not-allowed");
+            
+            submitBtn.disabled = false;
+            submitBtn.classList.remove("opacity-50", "cursor-not-allowed", "hover:bg-indigo-600");
+            
+            resetContainer.classList.add("hidden");
+            guessInput.focus();
+        }
+    </script>
 </body>
 </html>
